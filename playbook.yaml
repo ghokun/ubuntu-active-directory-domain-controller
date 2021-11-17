@@ -1,0 +1,117 @@
+---
+- hosts: ubuntu
+  become: yes
+  vars_files:
+    - config.yaml
+
+  tasks:
+    - name: "Check if host is already a domain controller"
+      shell: "samba-tool domain info {{ ansible_ssh_host }}"
+      register: is_dc
+      ignore_errors: yes
+
+    - name: "Set hostname"
+      hostname:
+        name: "{{ hostname }}"
+
+    - name: "Update and upgrade apt packages"
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400
+
+    - name: "Check if reboot required"
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: "Reboot"
+      reboot:
+        msg: "Reboot initiated by Ansible"
+      when: reboot_required.stat.exists
+
+    - name: "Edit hosts file"
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^{{ ansible_ssh_host }} {{ hostname }} {{ hostname }}.{{ domain }}"
+        insertbefore: "^127.0.0.1 localhost"
+        line: "{{ ansible_ssh_host }} {{ hostname }} {{ hostname }}.{{ domain }}"
+
+    - name: "Install dependencies"
+      apt:
+        name: "{{ packages }}"
+        update_cache: yes
+        state: present
+      vars:
+        packages:
+          - samba
+          - smbclient
+          - winbind
+          - libpam-winbind
+          - libnss-winbind
+          - krb5-kdc
+          - libpam-krb5
+
+    - name: "Disable Services"
+      systemd:
+        enabled: no
+        state: stopped
+        name: "{{ item }}"
+      with_items:
+        - samba-ad-dc.service
+        - smbd.service
+        - nmbd.service
+        - winbind.service
+        - systemd-resolved
+      when: is_dc.failed
+
+    - name: "Copy original /etc/samba/smb.conf"
+      copy:
+        src: /etc/samba/smb.conf
+        dest: /etc/samba/smb.conf.orig
+        remote_src: yes
+        force: no
+      when: is_dc.failed
+
+    - name: "Remove /etc/samba/smb.conf"
+      file:
+        path: /etc/samba/smb.conf
+        state: absent
+      when: is_dc.failed
+
+    - name: "Provision domain"
+      shell: "samba-tool domain provision --domain={{ workgroup }} --realm={{ realm }} --server-role=dc --dns-backend=SAMBA_INTERNAL --adminpass={{ admin_password }} --use-rfc2307"
+      when: is_dc.failed
+
+    - name: "Configure DNS forwarder in /etc/samba/smb.conf"
+      replace:
+        path: /etc/samba/smb.conf
+        regexp: "127.0.0.53"
+        replace: "{{ dns }}"
+        backup: yes
+      when: is_dc.failed
+
+    - name: "Copy original /etc/krb5.conf"
+      copy:
+        src: /etc/krb5.conf
+        dest: /etc/krb5.conf.orig
+        remote_src: yes
+        force: no
+      when: is_dc.failed
+
+    - name: "Symlink to /var/lib/samba/private/krb5.conf to /etc/krb5.conf"
+      file:
+        src: /var/lib/samba/private/krb5.conf
+        dest: /etc/krb5.conf
+        state: link
+        force: yes
+      when: is_dc.failed
+
+    - name: "Enable Services"
+      systemd:
+        masked: no
+        enabled: yes
+        state: started
+        name: samba-ad-dc.service
+      when: is_dc.failed
+

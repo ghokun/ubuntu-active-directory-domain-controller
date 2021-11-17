@@ -1,0 +1,6 @@
+hostname: dc1
+domain: 
+workgroup: 
+realm: 
+dns: 192.168.1.1
+admin_password: 
