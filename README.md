@@ -5,7 +5,15 @@ Modify following items to run this playbook:
 - inventory
 - config.yaml
 
-Run:
+## Run
 ```bash
 ansible-playbook -u <username> -K -k playbook.yaml
 ```
+
+## Add a Windows Client
+- Open a Windows client and make sure DNS is set accordingly. (If you have no DNS server use DC as DNS)
+- Find required menu to connect to domain
+- Domain name is `workgroup` inside `config.yaml`.
+- Enter Administrator as username and `admin_password` as password. (This is also set inside `config.yaml`)
+- Skip account add step.
+- Login with users defined in `config.yaml`
