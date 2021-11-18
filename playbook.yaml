@@ -47,10 +47,11 @@
           - samba
           - smbclient
           - winbind
+          - krb5-config
+          - krb5-user
+          - winbind
           - libpam-winbind
           - libnss-winbind
-          - krb5-kdc
-          - libpam-krb5
 
     - name: "Disable Services"
       systemd:
@@ -115,3 +116,26 @@
         name: samba-ad-dc.service
       when: is_dc.failed
 
+    - name: "Remove /etc/resolv.conf"
+      file:
+        path: /etc/resolv.conf
+        state: absent
+      when: is_dc.failed
+
+    - name: "Remove /etc/resolv.conf"
+      file:
+        path: /etc/resolv.conf
+        state: absent
+      when: is_dc.failed
+
+    - name: "Create /etc/resolv.conf"
+      copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 127.0.0.1
+          domain {{ domain }}
+      when: is_dc.failed
+
+    - name: "Create users"
+      shell: samba-tool user create {{ item.name }} {{ item.password }}
+      loop: "{{ users }}"
